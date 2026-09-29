@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Calculadora de Proyección de Inversión (Modo Oscuro)</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      background-color: #121212;
+      color: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      box-sizing: border-box;
+    }
+
+    .calc-container {
+      width: 100%;
+      max-width: 650px;
+      margin: 0 auto;
+      padding: 28px;
+      border: 1px solid #2d2d2d;
+      border-radius: 16px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+      background-color: #1a1a1a;
+      box-sizing: border-box;
+    }
+
+    .calc-title { 
+      font-size: 22px; 
+      font-weight: 700; 
+      margin-bottom: 6px; 
+      color: #ffffff; 
+      letter-spacing: -0.02em;
+    }
+
+    .calc-subtitle { 
+      font-size: 14px; 
+      color: #a0a0a0; 
+      margin-bottom: 24px; 
+    }
+
+    .slider-group { 
+      margin-bottom: 20px; 
+    }
+
+    .slider-label { 
+      display: flex; 
+      justify-content: space-between; 
+      font-size: 14px; 
+      font-weight: 500; 
+      margin-bottom: 8px; 
+      color: #e0e0e0;
+    }
+
+    .slider-input { 
+      width: 100%; 
+      accent-color: #3b82f6;
+      cursor: pointer;
+      background-color: #2a2a2a;
+      height: 6px;
+      border-radius: 3px;
+    }
+
+    .stats-grid { 
+      display: grid; 
+      grid-template-columns: repeat(3, 1fr); 
+      gap: 12px; 
+      margin: 24px 0; 
+      background-color: #262626; 
+      padding: 16px; 
+      border-radius: 12px; 
+      border: 1px solid #333333;
+    }
+
+    .stat-card { 
+      text-align: center; 
+    }
+
+    .stat-title { 
+      font-size: 12px; 
+      color: #a0a0a0; 
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .stat-value { 
+      font-size: 18px; 
+      font-weight: 700; 
+      color: #ffffff; 
+      margin-top: 6px; 
+    }
+
+    .highlight { 
+      color: #4ade80; 
+    }
+
+    canvas { 
+      max-width: 100%; 
+      margin-top: 12px; 
+    }
+  </style>
+</head>
+<body>
+
+<div class="calc-container">
+  <div class="calc-title">Proyección del Fondo Familiar</div>
+  <div class="calc-subtitle">Simulador de crecimiento con interés compuesto</div>
+
+  <div class="slider-group">
+    <div class="slider-label">
+      <span>Aporte Inicial ($)</span>
+      <span id="initialVal">$5,000</span>
+    </div>
+    <input type="range" id="initial" class="slider-input" min="0" max="100000" step="1000" value="5000">
+  </div>
+
+  <div class="slider-group">
+    <div class="slider-label">
+      <span>Aporte Mensual ($)</span>
+      <span id="monthlyVal">$300</span>
+    </div>
+    <input type="range" id="monthly" class="slider-input" min="50" max="3000" step="50" value="300">
+  </div>
+
+  <div class="slider-group">
+    <div class="slider-label">
+      <span>Rendimiento Anual Estimado (%)</span>
+      <span id="rateVal">7.0%</span>
+    </div>
+    <input type="range" id="rate" class="slider-input" min="3" max="12" step="0.5" value="7">
+  </div>
+
+  <div class="slider-group">
+    <div class="slider-label">
+      <span>Plazo de Inversión (Años)</span>
+      <span id="yearsVal">25 años</span>
+    </div>
+    <input type="range" id="years" class="slider-input" min="10" max="35" step="1" value="25">
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-title">Capital Aportado</div>
+      <div class="stat-value" id="totalDeposited">$95,000</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-title">Rendimiento Estimado</div>
+      <div class="stat-value" id="displayRate">7.0%</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-title">Fondo Total</div>
+      <div class="stat-value highlight" id="totalProjected">$248,870</div>
+    </div>
+  </div>
+
+  <canvas id="projectionChart" height="200"></canvas>
+</div>
+
+<script>
+  let chart;
+
+  function formatCurrency(val) {
+    return '$' + Math.round(val).toLocaleString('en-US');
+  }
+
+  function calculateData() {
+    const initial = parseFloat(document.getElementById('initial').value);
+    const monthly = parseFloat(document.getElementById('monthly').value);
+    const rate = parseFloat(document.getElementById('rate').value) / 100 / 12;
+    const years = parseInt(document.getElementById('years').value);
+
+    document.getElementById('initialVal').innerText = formatCurrency(initial);
+    document.getElementById('monthlyVal').innerText = formatCurrency(monthly);
+    document.getElementById('rateVal').innerText = (rate * 12 * 100).toFixed(1) + '%';
+    document.getElementById('yearsVal').innerText = years + ' años';
+
+    const labels = [];
+    const totals = [];
+    let currentTotal = initial;
+
+    for (let yr = 0; yr <= years; yr++) {
+      labels.push('Año ' + yr);
+      if (yr === 0) {
+        totals.push(initial);
+      } else {
+        for (let m = 0; m < 12; m++) {
+          currentTotal = (currentTotal + monthly) * (1 + rate);
+        }
+        totals.push(currentTotal);
+      }
+    }
+
+    const deposited = initial + (monthly * 12 * years);
+    const finalVal = totals[totals.length - 1];
+
+    document.getElementById('totalDeposited').innerText = formatCurrency(deposited);
+    document.getElementById('displayRate').innerText = (rate * 12 * 100).toFixed(1) + '%';
+    document.getElementById('totalProjected').innerText = formatCurrency(finalVal);
+
+    updateChart(labels, totals);
+  }
+
+  function updateChart(labels, data) {
+    if (chart) {
+      chart.data.labels = labels;
+      chart.data.datasets[0].data = data;
+      chart.update();
+    } else {
+      const ctx = document.getElementById('projectionChart').getContext('2d');
+      chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Valor Proyectado del Portafolio',
+            data: data,
+            borderColor: '#60a5fa',
+            backgroundColor: 'rgba(96, 165, 250, 0.15)',
+            fill: true,
+            tension: 0.2,
+            pointBackgroundColor: '#60a5fa',
+            pointHoverBackgroundColor: '#ffffff'
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { 
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: '#262626',
+              titleColor: '#ffffff',
+              bodyColor: '#4ade80',
+              borderColor: '#333333',
+              borderWidth: 1,
+              callbacks: {
+                label: function(context) {
+                  return ' Total: ' + formatCurrency(context.raw);
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              ticks: { color: '#a0a0a0' },
+              grid: { color: 'rgba(255, 255, 255, 0.05)' }
+            },
+            y: {
+              ticks: { 
+                color: '#a0a0a0',
+                callback: value => formatCurrency(value) 
+              },
+              grid: { color: 'rgba(255, 255, 255, 0.05)' }
+            }
+          }
+        }
+      });
+    }
+  }
+
+  document.querySelectorAll('.slider-input').forEach(input => {
+    input.addEventListener('input', calculateData);
+  });
+
+  calculateData();
+</script>
+
+</body>
+</html>
